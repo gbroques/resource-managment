@@ -1,12 +1,13 @@
 CC = gcc
 CFLAGS = -g -Wall -I.
 EXECS = oss user
+DEPS = ossshm.c sem.c
 
 all: $(EXECS)
 
-oss: ossshm.c
+oss: $(DEPS)
 
-user: ossshm.c
+user: $(DEPS)
 
 clean:
 	rm -f *.o $(EXECS)

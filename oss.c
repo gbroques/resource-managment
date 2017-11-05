@@ -21,9 +21,12 @@
 #include "oss.h"
 #include "ossshm.h"
 #include "myclock.h"
+#include "sem.h"
 
 static int clock_seg_id;
 static struct my_clock* clock_shm;
+
+static int sem_id;
 
 int main(int argc, char* argv[]) {
   int help_flag = 0;
@@ -66,6 +69,11 @@ int main(int argc, char* argv[]) {
   clock_seg_id = get_clock_shm();
   clock_shm = attach_to_clock_shm(clock_seg_id);
 
+  sem_id = allocate_sem(IPC_PRIVATE, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+
+  // Initialize clock to 1 second to simulate overhead
+  clock_shm->secs = 1;
+
   fork_and_exec_child();
 
   free_shm();
@@ -79,6 +87,7 @@ int main(int argc, char* argv[]) {
 static void free_shm(void) {
   detach_from_clock_shm(clock_shm);
   shmctl(clock_seg_id, IPC_RMID, 0);
+  deallocate_sem(sem_id);
 }
 
 /**
@@ -157,17 +166,35 @@ static void fork_and_exec_child() {
   }
 
   if (pid == 0) {  // Child
-    char clock_seg_id_string[12];
-    snprintf(clock_seg_id_string,
-             sizeof(clock_seg_id_string),
+    char* clock_seg_id_str[12];
+    snprintf(clock_seg_id_str,
+             sizeof(clock_seg_id_str),
              "%d",
              clock_seg_id);
+
+    char* sem_id_str[12];
+    snprintf(sem_id_str,
+             sizeof(sem_id_str),
+             "%d",
+             sem_id);
+
     execlp("user",
            "user",
            "0",
-           clock_seg_id_string,
+           clock_seg_id_str,
+           sem_id_str,
            (char*) NULL);
     perror("Failed to exec");
     _exit(EXIT_FAILURE);
   }
+}
+
+
+static char* to_string(int number) {
+  char* string[12];
+  snprintf(string,
+           sizeof(string),
+           "%d",
+           number);
+  return string;
 }

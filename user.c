@@ -14,10 +14,10 @@
 #include "myclock.h"
 
 int main(int argc, char* argv[]) {
-  if (argc != 3) {
+  if (argc != 4) {
     fprintf(
       stderr,
-      "Usage: %s pid clock_seg_id\n",
+      "Usage: %s pid clock_seg_id sem_id\n",
       argv[0]
     );
     return EXIT_FAILURE;
@@ -25,6 +25,7 @@ int main(int argc, char* argv[]) {
 
   const int pid = atoi(argv[1]);
   const int clock_seg_id = atoi(argv[2]);
+  const int sem_id = atoi(argv[3]);
 
   struct my_clock* clock_shm = attach_to_clock_shm(clock_seg_id);
 
