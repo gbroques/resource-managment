@@ -30,6 +30,5 @@ static void print_help_message(char* executable_name,
 static int is_required_argument(char optopt);
 static void print_required_argument_message(char optopt);
 static void fork_and_exec_child();
-static char* to_string(int number);
 
 #endif

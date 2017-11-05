@@ -22,9 +22,20 @@
 #include "ossshm.h"
 #include "myclock.h"
 #include "sem.h"
+#include "resource.h"
 
-static int clock_seg_id;
+#define NUM_RES 20
+#define MAX_PROC 18
+#define MAX_RUN_TIME 2  // in seconds
+
+static int clock_id;
 static struct my_clock* clock_shm;
+
+static int res_list_id;
+static struct res_node* res_list;
+
+static int proc_list_id;
+static struct proc_node* proc_list;
 
 static int sem_id;
 
@@ -66,8 +77,14 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  clock_seg_id = get_clock_shm();
-  clock_shm = attach_to_clock_shm(clock_seg_id);
+  clock_id = get_clock_shm();
+  clock_shm = attach_to_clock_shm(clock_id);
+
+  res_list_id = get_res_list(NUM_RES);
+  res_list = attach_to_res_list(res_list_id);
+
+  proc_list_id = get_proc_list(MAX_PROC);
+  proc_list = attach_to_proc_list(proc_list_id);
 
   sem_id = allocate_sem(IPC_PRIVATE, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
 
@@ -86,7 +103,14 @@ int main(int argc, char* argv[]) {
  */
 static void free_shm(void) {
   detach_from_clock_shm(clock_shm);
-  shmctl(clock_seg_id, IPC_RMID, 0);
+  shmctl(clock_id, IPC_RMID, 0);
+
+  detach_from_res_list(res_list);
+  shmctl(res_list_id, IPC_RMID, 0);
+
+  detach_from_proc_list(proc_list);
+  shmctl(proc_list_id, IPC_RMID, 0);
+
   deallocate_sem(sem_id);
 }
 
@@ -166,13 +190,25 @@ static void fork_and_exec_child() {
   }
 
   if (pid == 0) {  // Child
-    char* clock_seg_id_str[12];
-    snprintf(clock_seg_id_str,
-             sizeof(clock_seg_id_str),
+    char clock_id_str[12];
+    snprintf(clock_id_str,
+             sizeof(clock_id_str),
              "%d",
-             clock_seg_id);
+             clock_id);
 
-    char* sem_id_str[12];
+    char res_list_id_str[12];
+    snprintf(res_list_id_str,
+             sizeof(res_list_id_str),
+             "%d",
+             res_list_id);
+
+    char proc_list_id_str[12];
+    snprintf(proc_list_id_str,
+             sizeof(proc_list_id_str),
+             "%d",
+             proc_list_id);
+
+    char sem_id_str[12];
     snprintf(sem_id_str,
              sizeof(sem_id_str),
              "%d",
@@ -181,20 +217,12 @@ static void fork_and_exec_child() {
     execlp("user",
            "user",
            "0",
-           clock_seg_id_str,
+           clock_id_str,
+           res_list_id_str,
+           proc_list_id_str,
            sem_id_str,
            (char*) NULL);
     perror("Failed to exec");
     _exit(EXIT_FAILURE);
   }
-}
-
-
-static char* to_string(int number) {
-  char* string[12];
-  snprintf(string,
-           sizeof(string),
-           "%d",
-           number);
-  return string;
 }
