@@ -23,6 +23,7 @@
  * PROTOTYPES *
  **************/
 static int setup_interrupt(void);
+static int setup_interval_timer(int time);
 static void free_shm(void);
 static void free_shm_and_abort(int s);
 static void print_help_message(char* executable_name,

@@ -77,6 +77,14 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
+  if (setup_interval_timer(2) == -1) {
+    perror("Faled to set up interval timer");
+    return EXIT_FAILURE;
+  }
+
+  signal(SIGINT, free_shm_and_abort);
+  signal(SIGALRM, free_shm_and_abort);
+
   clock_id = get_clock_shm();
   clock_shm = attach_to_clock_shm(clock_id);
 
@@ -91,7 +99,16 @@ int main(int argc, char* argv[]) {
   // Initialize clock to 1 second to simulate overhead
   clock_shm->secs = 1;
 
-  fork_and_exec_child();
+  while (1) {
+    if (clock_shm->nanosecs >= NANOSECS_PER_SEC) {
+      clock_shm->secs += 1;
+      clock_shm->nanosecs = 0;
+    } else {
+      // Add 4 for more realistic clock
+      clock_shm->nanosecs += 4;
+    }
+  }
+
 
   free_shm();
 
@@ -131,6 +148,21 @@ static int setup_interrupt(void) {
   act.sa_handler = free_shm_and_abort;
   act.sa_flags = 0;
   return (sigemptyset(&act.sa_mask) || sigaction(SIGPROF, &act, NULL));
+}
+
+/*
+ * Sets up an interval timer
+ *
+ * @param time The duration of the timer in seconds
+ *
+ * @return Zero on success. -1 on error.
+ */
+static int setup_interval_timer(int time) {
+  struct itimerval value;
+  value.it_interval.tv_sec = time;
+  value.it_interval.tv_usec = 0;
+  value.it_value = value.it_interval;
+  return (setitimer(ITIMER_REAL, &value, NULL));
 }
 
 /**
