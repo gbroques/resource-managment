@@ -1,6 +1,8 @@
 #ifndef OSS_H
 #define OSS_H
 
+#include "resource.h"
+
 /**************
  * STRUCTURES *
  **************/
@@ -31,5 +33,8 @@ static void print_help_message(char* executable_name,
 static int is_required_argument(char optopt);
 static void print_required_argument_message(char optopt);
 static void fork_and_exec_child();
+static void init_res_list(struct res_node* res_list);
+static void print_res_list(struct res_node* res_list);
+static void print_res_node(struct res_node node);
 
 #endif

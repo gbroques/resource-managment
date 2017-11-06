@@ -5,9 +5,9 @@
 #define MAX_REQUESTS  20
 
 struct res_node {
+  unsigned int type;
   unsigned int num_instances;
   unsigned int num_allocated;
-  unsigned int type;
   int shareable;
   struct proc_node* held_by[MAX_INSTANCES];
 };

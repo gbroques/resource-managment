@@ -82,6 +82,8 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
+  srand(time(NULL));
+
   signal(SIGINT, free_shm_and_abort);
   signal(SIGALRM, free_shm_and_abort);
 
@@ -90,6 +92,9 @@ int main(int argc, char* argv[]) {
 
   res_list_id = get_res_list(NUM_RES);
   res_list = attach_to_res_list(res_list_id);
+  init_res_list(res_list);
+
+  print_res_list(res_list);
 
   proc_list_id = get_proc_list(MAX_PROC);
   proc_list = attach_to_proc_list(proc_list_id);
@@ -108,7 +113,6 @@ int main(int argc, char* argv[]) {
       clock_shm->nanosecs += 4;
     }
   }
-
 
   free_shm();
 
@@ -257,4 +261,54 @@ static void fork_and_exec_child() {
     perror("Failed to exec");
     _exit(EXIT_FAILURE);
   }
+}
+
+/**
+ * Initializes the resource list with:
+ *   - 1 to 10 instances per resource
+ *   - First 3 to 5 resources are shareable
+ */
+static void init_res_list(struct res_node* res_list) {
+  int num_shareable = (rand() % 3) + 3;  // 3 to 5
+  int i = 0;
+  for (; i < NUM_RES; i++) {
+    // Assign 1 to 10 instances per resource
+    (res_list + i)->num_instances = rand() % MAX_INSTANCES + 1;
+
+    (res_list + i)->num_allocated = 0;
+
+    (res_list + i)->type = i;
+
+    // Assign first 3 to 5 resources as shareable
+    int is_shareable = num_shareable > 0 ? 1 : 0;
+    (res_list + i)->shareable = is_shareable;
+    num_shareable--;
+
+    int j = 0;
+    for (; j < MAX_INSTANCES; j++) {
+      (res_list + i)->held_by[j] = NULL;
+    }
+  }
+}
+
+static void print_res_list(struct res_node* res_list) {
+  int i = 0;
+  for (; i < NUM_RES; i++) {
+    print_res_node(*(res_list + i));
+  }
+}
+
+static void print_res_node(struct res_node node) {
+  printf("R%02d ", node.type);
+  printf("num_instances %02d ", node.num_instances);
+  printf("num_allocated %02d ", node.num_allocated);
+  printf("shareable %d ", node.shareable);
+  int i = 0;
+  for (; i < MAX_INSTANCES; i++) {
+    if (node.held_by[i] != NULL) {
+      printf("held by P%02d",
+             node.held_by[i]->id);
+    }
+  }
+  printf("\n");
 }
