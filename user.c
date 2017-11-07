@@ -14,7 +14,6 @@
 #include "resource.h"
 #include "myclock.h"
 
-
 /*---------*
  | GLOBALS |
  *---------*/
@@ -92,11 +91,32 @@ static int is_past_time(struct my_clock myclock) {
           clock_shm->nanosecs >= myclock.nanosecs);
 }
 
+static void request_res(int pid, int num_res) {
+  int i = rand() % num_res;
+  struct res_node* res = res_list + i;
+
+  fprintf(stderr, "P%d requesting R%d\n", pid, res->type);
+  
+  // Make request
+  proc_list[pid].request = res->type;
+
+  // Find next available index
+  int k = get_res_instance(res);
+  
+  if (k == -1) {
+    while (1); // Wait if no more instances are available
+  }
+
+  // Wait until request is granted
+  while (res->held_by[k] == -1);
+  fprintf(stderr, "P%d request for R%d granted!\n", pid, res->type);
+}
+
 int main(int argc, char* argv[]) {
-  if (argc != 7) {
+  if (argc != 8) {
     fprintf(
       stderr,
-      "Usage: %s pid bound clock_seg_id res_list_id proc_list_id sem_id\n",
+      "Usage: %s pid bound num_res clock_seg_id res_list_id proc_list_id sem_id\n",
       argv[0]
     );
     return EXIT_FAILURE;
@@ -106,10 +126,11 @@ int main(int argc, char* argv[]) {
 
   const int pid           = atoi(argv[1]);
   const int bound         = atoi(argv[2]);
-  const int clock_id      = atoi(argv[3]);
-  const int res_list_id   = atoi(argv[4]);
-  const int proc_list_id  = atoi(argv[5]);
-  const int sem_id        = atoi(argv[6]);
+  const int num_res       = atoi(argv[3]);  // Number of resources
+  const int clock_id      = atoi(argv[4]);
+  const int res_list_id   = atoi(argv[5]);
+  const int proc_list_id  = atoi(argv[6]);
+  const int sem_id        = atoi(argv[7]);
 
   signal(SIGTERM, detach_from_shm);
 
@@ -128,6 +149,7 @@ int main(int argc, char* argv[]) {
     // Every 1 to bound ms, check should request /
     // release a resource
     if (is_past_time(res_time)) {
+      request_res(pid, num_res);
       fprintf(stderr, "Requesting / releasing a resource\n");
       res_time = get_rand_future_time(bound);
     }

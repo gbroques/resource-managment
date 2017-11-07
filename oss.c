@@ -99,6 +99,8 @@ int main(int argc, char* argv[]) {
   signal(SIGINT, free_shm_and_abort);
   signal(SIGALRM, free_shm_and_abort);
 
+  int num_grants = 0;
+
   clock_id = get_clock_shm();
   clock_shm = attach_to_clock_shm(clock_id);
 
@@ -110,6 +112,7 @@ int main(int argc, char* argv[]) {
 
   proc_list_id = get_proc_list(MAX_PROC);
   proc_list = attach_to_proc_list(proc_list_id);
+  init_proc_list(proc_list);
 
   sem_id = allocate_sem(IPC_PRIVATE, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
 
@@ -127,6 +130,21 @@ int main(int argc, char* argv[]) {
       clock_shm->nanosecs = 0;
     } else {
       // Add 4 for more realistic clock
+      clock_shm->nanosecs += 4;
+    }
+
+    // Check for requests
+    int i = 0;
+    for (; i < MAX_PROC; i++) {
+      struct proc_node* proc = proc_list + i;
+      if (proc->request != -1 && can_grant_request(proc->request)) {
+        fprintf(stderr, "Granting P%d request for R%d\n", i, proc->request);
+        num_grants++;
+        struct res_node* res = res_list + proc->request;
+        int k = get_res_instance(res);
+        proc->request = -1;
+        res->held_by[k] = i;
+      } 
       clock_shm->nanosecs += 4;
     }
   }
@@ -256,6 +274,12 @@ static void fork_and_exec_child(int index) {
   }
 
   if (children[index] == 0) {  // Child
+    char num_res_str[12];
+    snprintf(num_res_str,
+             sizeof(num_res_str),
+             "%d",
+             NUM_RES);
+
     char clock_id_str[12];
     snprintf(clock_id_str,
              sizeof(clock_id_str),
@@ -284,6 +308,7 @@ static void fork_and_exec_child(int index) {
            "user",
            "0",
            bound,
+           num_res_str,
            clock_id_str,
            res_list_id_str,
            proc_list_id_str,
@@ -317,8 +342,21 @@ static void init_res_list(struct res_node* res_list) {
 
     int j = 0;
     for (; j < MAX_INSTANCES; j++) {
-      (res_list + i)->held_by[j] = NULL;
+      (res_list + i)->held_by[j] = -1;
     }
+  }
+}
+
+/**
+ * Initializes the process list with:
+ *   - Process ID
+ *   - Request set to NULL
+ */
+static void init_proc_list(struct proc_node* proc_list) {
+  int i = 0;
+  for (; i < MAX_PROC; i++) {
+    proc_list[i].id = i;
+    proc_list[i].request = -1;
   }
 }
 
@@ -336,9 +374,9 @@ static void print_res_node(struct res_node node) {
   printf("shareable %d ", node.shareable);
   int i = 0;
   for (; i < MAX_INSTANCES; i++) {
-    if (node.held_by[i] != NULL) {
+    if (node.held_by[i] != -1) {
       printf("held by P%02d",
-             node.held_by[i]->id);
+             node.held_by[i]);
     }
   }
   printf("\n");
@@ -347,6 +385,11 @@ static void print_res_node(struct res_node node) {
 static void kill_children() {
   int i = 0;
   for (; i < MAX_PROC; i++) {
-    kill(children[i], SIGTERM);
+    kill(children[i], SIGKILL);
   }
+}
+
+static int can_grant_request(int request) {
+  int i = get_res_instance(res_list + request);
+  return i != -1 ? 1 : 0;
 }

@@ -37,6 +37,8 @@ static void fork_and_exec_child();
 static void init_res_list(struct res_node* res_list);
 static void print_res_list(struct res_node* res_list);
 static void print_res_node(struct res_node node);
+static void init_proc_list(struct proc_node* proc_list);
 static void kill_children();
+static int can_grant_request(int request);
 
 #endif
