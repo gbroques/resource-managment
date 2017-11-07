@@ -28,6 +28,10 @@
 #define MAX_PROC 18
 #define MAX_RUN_TIME 2  // in seconds
 
+/* Globals
+ *--------*/
+char* bound = "100";  // in milliseconds
+
 static int clock_id;
 static struct my_clock* clock_shm;
 
@@ -45,13 +49,16 @@ int main(int argc, char* argv[]) {
   opterr = 0;
   int c;
 
-  while ((c = getopt(argc, argv, "hl:")) != -1) {
+  while ((c = getopt(argc, argv, "hl:b:")) != -1) {
     switch (c) {
       case 'h':
         help_flag = 1;
         break;
       case 'l':
         log_file = optarg;
+        break;
+      case 'b':
+        bound = optarg;
         break;
       case '?':
         if (is_required_argument(optopt)) {
@@ -103,6 +110,8 @@ int main(int argc, char* argv[]) {
 
   // Initialize clock to 1 second to simulate overhead
   clock_shm->secs = 1;
+
+  fork_and_exec_child(0);
 
   while (1) {
     if (clock_shm->nanosecs >= NANOSECS_PER_SEC) {
@@ -207,11 +216,15 @@ static int is_required_argument(char optopt) {
  */
 static void print_required_argument_message(char option) {
   switch (option) {
+    case 'b':
+      fprintf(stderr,
+              "Option -%c requires the bound of when a child process will request or let go of a resource.\n",
+              optopt);
+      break;
     case 'l':
-      fprintf(
-        stderr,
-        "Option -%c requires the name of the log file.\n",
-        optopt);
+      fprintf(stderr,
+              "Option -%c requires the name of the log file.\n",
+              optopt);
       break;
   }
 }
@@ -253,6 +266,7 @@ static void fork_and_exec_child() {
     execlp("user",
            "user",
            "0",
+           bound,
            clock_id_str,
            res_list_id_str,
            proc_list_id_str,

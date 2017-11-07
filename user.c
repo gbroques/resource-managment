@@ -15,20 +15,21 @@
 #include "myclock.h"
 
 int main(int argc, char* argv[]) {
-  if (argc != 6) {
+  if (argc != 7) {
     fprintf(
       stderr,
-      "Usage: %s pid clock_seg_id res_list_id proc_list_id sem_id\n",
+      "Usage: %s pid bound clock_seg_id res_list_id proc_list_id sem_id\n",
       argv[0]
     );
     return EXIT_FAILURE;
   }
 
-  const int pid = atoi(argv[1]);
-  const int clock_id = atoi(argv[2]);
-  const int res_list_id = atoi(argv[3]);
-  const int proc_list_id = atoi(argv[4]);
-  const int sem_id = atoi(argv[5]);
+  const int pid           = atoi(argv[1]);
+  const int bound         = atoi(argv[2]);
+  const int clock_id      = atoi(argv[3]);
+  const int res_list_id   = atoi(argv[4]);
+  const int proc_list_id  = atoi(argv[5]);
+  const int sem_id        = atoi(argv[6]);
 
   struct my_clock* clock_shm = attach_to_clock_shm(clock_id);
   struct res_node* res_list = attach_to_res_list(res_list_id);
