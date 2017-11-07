@@ -35,13 +35,36 @@ static int should_terminate() {
   return should_terminate;
 }
 
+/**
+ * Get a time to check if the process
+ * should terminate, 1 to 250 milliseconds in
+ * the future.
+ */
+struct my_clock get_time_to_check() {
+  struct my_clock check_time;
+  check_time.secs     = clock_shm->secs;
+  check_time.nanosecs = clock_shm->nanosecs;
+  int time_to_check = (rand() % 250 + 1) * NANOSECS_PER_MILLISEC;  // 1 to 250 milliseconds
+  check_time = add_nanosecs_to_clock(check_time, time_to_check);
+  return check_time;
+}
+
 static void detach_from_shm() {
+  // TODO:
+  // Deallocate resources by communicating to master that
+  // it's releasing all of those resources
+
   if (clock_shm != NULL)
     detach_from_clock_shm(clock_shm);
   if (res_list != NULL)
     detach_from_res_list(res_list);
   if (proc_list != NULL)
     detach_from_proc_list(proc_list);
+}
+
+static int is_past_time(struct my_clock myclock) {
+  return (clock_shm->secs     >= myclock.secs &&
+          clock_shm->nanosecs >= myclock.nanosecs);
 }
 
 int main(int argc, char* argv[]) {
@@ -71,29 +94,15 @@ int main(int argc, char* argv[]) {
 
   int is_terminating = 0;
 
-  // Check if should terminate in 1 to 250 milliseconds
-  struct my_clock check_time;
-  check_time.secs     = clock_shm->secs;
-  check_time.nanosecs = clock_shm->nanosecs;
-  int time_to_check = (rand() % 250 + 1) * NANOSECS_PER_MILLISEC;  // 1 to 250 milliseconds
-  check_time = add_nanosecs_to_clock(check_time, time_to_check);
-  fprintf(stderr, "[%02d:%010d] START\n", clock_shm->secs, clock_shm->nanosecs);
-  fprintf(stderr, "[%02d:%010d] CHECK\n", check_time.secs, check_time.nanosecs);
+  struct my_clock check_time = get_time_to_check();
   while (!is_terminating) {
-    if (clock_shm->secs     >= check_time.secs &&
-        clock_shm->nanosecs >= check_time.nanosecs) {
-      is_terminating = should_terminate();
-      fprintf(stderr, "Checking... should terminate %d\n", is_terminating);
 
-      time_to_check = (rand() % 250 + 1) * NANOSECS_PER_MILLISEC;  // 1 to 250 milliseconds
-      check_time = add_nanosecs_to_clock(check_time, time_to_check);
-    fprintf(stderr, "[%02d:%010d] CHECK AGAIN\n", check_time.secs, check_time.nanosecs);
+    // Every 1 to 250 ms, check should terminate
+    if (is_past_time(check_time)) {
+      is_terminating = should_terminate();
+      check_time = get_time_to_check();
     }
   }
-
-
-  // Deallocate resources by communicating to master that
-  // it's releasing all of those resources
 
   detach_from_shm();
 
