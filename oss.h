@@ -36,5 +36,6 @@ static void fork_and_exec_child();
 static void init_res_list(struct res_node* res_list);
 static void print_res_list(struct res_node* res_list);
 static void print_res_node(struct res_node node);
+static void kill_children();
 
 #endif

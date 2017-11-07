@@ -13,6 +13,8 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <sys/ipc.h>
+#include <sys/types.h>
+#include <signal.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <ctype.h>
@@ -28,9 +30,12 @@
 #define MAX_PROC 18
 #define MAX_RUN_TIME 2  // in seconds
 
-/* Globals
- *--------*/
+/*---------*
+ | GLOBALS |
+ *---------*/
 char* bound = "100";  // in milliseconds
+
+pid_t children[MAX_PROC];
 
 static int clock_id;
 static struct my_clock* clock_shm;
@@ -114,6 +119,9 @@ int main(int argc, char* argv[]) {
   fork_and_exec_child(0);
 
   while (1) {
+    if (clock_shm->nanosecs % 100000000 == 0) {
+      fprintf(stderr, "[%02d:%010d]\n", clock_shm->secs, clock_shm->nanosecs);
+    }
     if (clock_shm->nanosecs >= NANOSECS_PER_SEC) {
       clock_shm->secs += 1;
       clock_shm->nanosecs = 0;
@@ -149,6 +157,7 @@ static void free_shm(void) {
  */
 static void free_shm_and_abort(int s) {
   free_shm();
+  kill_children();
   abort();
 }
 
@@ -230,15 +239,20 @@ static void print_required_argument_message(char option) {
 }
 
 
-static void fork_and_exec_child() {
-  pid_t pid = fork();
+/**
+ * Forks and execs a child process.
+ * 
+ * @param index Index of children PID array
+ */
+static void fork_and_exec_child(int index) {
+  children[index] = fork();
 
-  if (pid == -1) {
+  if (children[index] == -1) {
     perror("Failed to fork");
     exit(EXIT_FAILURE);
   }
 
-  if (pid == 0) {  // Child
+  if (children[index] == 0) {  // Child
     char clock_id_str[12];
     snprintf(clock_id_str,
              sizeof(clock_id_str),
@@ -325,4 +339,11 @@ static void print_res_node(struct res_node node) {
     }
   }
   printf("\n");
+}
+
+static void kill_children() {
+  int i = 0;
+  for (; i < MAX_PROC; i++) {
+    kill(children[i], SIGTERM);
+  }
 }

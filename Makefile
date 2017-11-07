@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -g -Wall -I.
 EXECS = oss user
-DEPS = ossshm.c sem.c
+DEPS = ossshm.c sem.c myclock.c
 
 all: $(EXECS)
 

@@ -12,6 +12,6 @@
 * Roll a random number from 0 to that bound when the process should request or release a resource it already has
 * Make the request through shared memory
 * Enter a loop and keep checking to see if request is granted
-* Every 0 to 250 ms check if the the process should terminate
-* If so, deallocate all resources by communicating to master that it's releasing all of those resource
+* ~~Every 0 to 250 ms check if the the process should terminate~~
+* If so, deallocate all resources by communicating to master that it's releasing all of those resources
 * Make sure the probability is low enough for churn to happen
