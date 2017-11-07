@@ -36,6 +36,16 @@ static int should_terminate() {
 }
 
 /**
+ * Get a random amount of milliseconds
+ *
+ * @param bound Maximum bound in millisecons
+ * @return Random amount of milliseconds in nanoseconds
+ */
+int get_rand_millisecs(int bound) {
+  return (rand() % bound + 1) * NANOSECS_PER_MILLISEC;
+}
+
+/**
  * Get a time to check if the process
  * should terminate, 1 to 250 milliseconds in
  * the future.
@@ -44,9 +54,24 @@ struct my_clock get_time_to_check() {
   struct my_clock check_time;
   check_time.secs     = clock_shm->secs;
   check_time.nanosecs = clock_shm->nanosecs;
-  int time_to_check = (rand() % 250 + 1) * NANOSECS_PER_MILLISEC;  // 1 to 250 milliseconds
+  int time_to_check = get_rand_millisecs(250);
   check_time = add_nanosecs_to_clock(check_time, time_to_check);
   return check_time;
+}
+
+/**
+ * Get a random time from 1 to bound inclusive,
+ * in the future.
+ *
+ * @param bound The maximum bound in milliseconds
+ */
+struct my_clock get_rand_future_time(int bound) {
+  struct my_clock future_time;
+  future_time.secs     = clock_shm->secs;
+  future_time.nanosecs = clock_shm->nanosecs;
+  int rand_ms = get_rand_millisecs(bound);
+  future_time = add_nanosecs_to_clock(future_time, rand_ms);
+  return future_time;
 }
 
 static void detach_from_shm() {
@@ -92,15 +117,26 @@ int main(int argc, char* argv[]) {
   res_list = attach_to_res_list(res_list_id);
   proc_list = attach_to_proc_list(proc_list_id);
 
+  // When should process request / release a resource
+  struct my_clock res_time = get_rand_future_time(bound);
+
   int is_terminating = 0;
 
-  struct my_clock check_time = get_time_to_check();
+  struct my_clock check_time = get_rand_future_time(250);
   while (!is_terminating) {
+
+    // Every 1 to bound ms, check should request /
+    // release a resource
+    if (is_past_time(res_time)) {
+      fprintf(stderr, "Requesting / releasing a resource\n");
+      res_time = get_rand_future_time(bound);
+    }
 
     // Every 1 to 250 ms, check should terminate
     if (is_past_time(check_time)) {
       is_terminating = should_terminate();
-      check_time = get_time_to_check();
+      fprintf(stderr, "Checking should terminate %d\n", is_terminating);
+      check_time = get_rand_future_time(250);
     }
   }
 

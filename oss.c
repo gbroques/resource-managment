@@ -33,7 +33,7 @@
 /*---------*
  | GLOBALS |
  *---------*/
-char* bound = "100";  // in milliseconds
+char* bound = "250";  // in milliseconds
 
 pid_t children[MAX_PROC];
 
@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
   }
 
   if (help_flag) {
-    print_help_message(argv[0], log_file);
+    print_help_message(argv[0], log_file, bound);
     exit(EXIT_SUCCESS);
   }
 
@@ -195,12 +195,15 @@ static int setup_interval_timer(int time) {
  * @param log_file Name of the log file
  */
 static void print_help_message(char* executable_name,
-                               char* log_file) {
+                               char* log_file,
+                               char* bound) {
   printf("Operating System Simulator\n\n");
   printf("Usage: ./%s\n\n", executable_name);
   printf("Arguments:\n");
   printf(" -h  Show help.\n");
   printf(" -l  Specify the log file. Defaults to '%s'.\n", log_file);
+  printf(" -b  Specify the upper bound for when processes should request or release a resource.\n");
+  printf("     Defaults to %s milliseconds.\n", bound);
 }
 
 /**

@@ -8,8 +8,8 @@
   * Between 1 and 500 ms of logical clock
 
 # USER
-* ~~Add parameter specifying bound for when a proces should request / let go of a resource~~
-* Roll a random number from 0 to that bound when the process should request or release a resource it already has
+* ~~Add parameter specifying bound for when a process should request / let go of a resource~~
+* ~~Roll a random number from 0 to that bound when the process should request or release a resource it already has~~
 * Make the request through shared memory
 * Enter a loop and keep checking to see if request is granted
 * ~~Every 0 to 250 ms check if the the process should terminate~~
