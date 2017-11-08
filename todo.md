@@ -6,7 +6,7 @@
 * ~~Get 1 process requesting, releasing, and allocating resources~~
 * Fork multiple children at random times
   * Between 1 and 500 ms of logical clock
-* Every 20 requests granted, output table showing the current resources allocated to each process
+* ~~Every 20 requests granted, output table showing the current resources allocated to each process~~
 * Output to log file and add verbose setting
 
 # USER

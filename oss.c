@@ -53,6 +53,8 @@ static struct proc_action* proc_action_shm;
 
 static int sem_id;
 
+static void print_table(void);
+
 int main(int argc, char* argv[]) {
   int help_flag = 0;
   char* log_file = "oss.out";
@@ -183,6 +185,9 @@ int main(int argc, char* argv[]) {
         res->num_allocated++;
         res->held_by[i] = proc->id;
         proc->holds[i] = res->type;
+        if (num_grants % 20 == 0 && num_grants != 0) {
+          print_table();
+        }
       } else if (action == RELEASE && has_resource(proc->id)) {
         fprintf(stderr,
                 "[%02d:%010d] Granting P%02d request to release R%02d\n",
@@ -491,4 +496,31 @@ static int is_proc_action_available(struct proc_action* pa) {
 
 static int has_resource(int pid) {
   return (proc_list + pid)->holds[0] != -1 ? 1 : 0;
+}
+
+static void print_table(void) {
+  // Print header row
+  fprintf(stderr, "    ");
+  int i = 0;
+  for (; i < NUM_RES; i++)
+    fprintf(stderr, "R%02d ", i);
+  fprintf(stderr, "\n");
+
+  // Print how many resources each process holds
+  i = 0;
+  for(; i < MAX_PROC; i++) {
+    fprintf(stderr, "P%02d  ", i);
+    int j = 0;
+    for (; j < NUM_RES; j++) {
+      int amt = 0;
+      int k = 0;
+      for (; k < MAX_INSTANCES; k++) {
+        if ((res_list + j)->held_by[k] == i)
+          amt++;
+      }
+      fprintf(stderr, "%02d  ", amt);
+    }
+    fprintf(stderr, "\n");
+  }
+
 }
