@@ -37,6 +37,8 @@ char* bound = "250";  // in milliseconds
 
 pid_t children[MAX_PROC];
 
+static FILE* fp;
+
 static int clock_id;
 static struct my_clock* clock_shm;
 
@@ -104,6 +106,13 @@ int main(int argc, char* argv[]) {
 
   int num_grants = 0;
 
+  fp = fopen(log_file, "w+");
+
+  if (fp == NULL) {
+    perror("Failed to open log file");
+    exit(EXIT_FAILURE);
+  }
+
   clock_id = get_clock_shm();
   clock_shm = attach_to_clock_shm(clock_id);
 
@@ -147,12 +156,25 @@ int main(int argc, char* argv[]) {
       struct proc_node* proc = proc_list + proc_action_shm->pid;
       struct res_node* res = res_list + proc_action_shm->res_type;
       enum res_action action = proc_action_shm->action;
+      char* action_str = action == REQUEST ? "claim" : "release";
 
       proc->request = res->type;
 
+      fprintf(stderr,
+              "[%02d:%010d] Detected P%02d request to %s R%02d\n",
+              clock_shm->secs,
+              clock_shm->nanosecs,
+              proc->id,
+              action_str,
+              res->type);
+
+      clock_shm->nanosecs += 4;
+
       if (action == REQUEST && can_grant_request(res->type)) {
         fprintf(stderr,
-                "Granting P%d request for R%d\n",
+                "[%02d:%010d] Granting P%02d request for R%02d\n",
+                clock_shm->secs,
+                clock_shm->nanosecs,
                 proc->id,
                 res->type);
         num_grants++;
@@ -161,12 +183,11 @@ int main(int argc, char* argv[]) {
         res->num_allocated++;
         res->held_by[i] = proc->id;
         proc->holds[i] = res->type;
-
-        // Reset process action
-        init_proc_action(proc_action_shm);
       } else if (action == RELEASE && has_resource(proc->id)) {
         fprintf(stderr,
-                "Granting P%d request to release R%d\n",
+                "[%02d:%010d] Granting P%02d request to release R%02d\n",
+                clock_shm->secs,
+                clock_shm->nanosecs,
                 proc->id,
                 res->type);
         int i = 0;
@@ -176,15 +197,26 @@ int main(int argc, char* argv[]) {
         res->num_allocated--;
         res->held_by[--i] = -1;
         proc->holds[i] = -1;
-
-        // Reset process action
-        init_proc_action(proc_action_shm);
-      } else {
-        // fprintf(stderr,
-        //         "OSS cannot grant P%d request to claim / release R%d\n",
-        //         proc->id,
-        //         res->type);
+      } else if ((res->num_instances - res->num_allocated) == 0) {
+        fprintf(stderr,
+                "[%02d:%010d] P%02d deadlocked waiting for R%02d\n",
+                clock_shm->secs,
+                clock_shm->nanosecs,
+                proc->id,
+                res->type);
       }
+
+      clock_shm->nanosecs += 4;
+
+      fprintf(stderr,
+              "[%02d:%010d] %d instance(s) of R%02d left\n",
+              clock_shm->secs,
+              clock_shm->nanosecs,
+              (res->num_instances - res->num_allocated),
+              res->type);
+
+      // Reset process action
+      init_proc_action(proc_action_shm);
     }
   }
 
@@ -443,8 +475,8 @@ static void kill_children() {
 }
 
 static int can_grant_request(int request) {
-  int i = get_res_instance(res_list + request);
-  return i != -1 ? 1 : 0;
+  struct res_node* res = (res_list + request);
+  return res->num_instances - res->num_allocated;
 }
 
 static void init_proc_action(struct proc_action* pa) {
