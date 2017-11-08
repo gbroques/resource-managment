@@ -38,7 +38,9 @@ static void init_res_list(struct res_node* res_list);
 static void print_res_list(struct res_node* res_list);
 static void print_res_node(struct res_node node);
 static void init_proc_list(struct proc_node* proc_list);
+static void init_proc_action(struct proc_action* pa);
 static void kill_children();
 static int can_grant_request(int request);
+static int is_proc_action_available(struct proc_action* pa);
 
 #endif

@@ -16,6 +16,22 @@ struct proc_node {
   int request;
 };
 
+enum res_action {
+  IDLE,     // No action to be taken
+  REQUEST,  // Request the resource
+  RELEASE   // Release the resource
+};
+
+/**
+ * A structure containing information about the
+ * action a process can take upon a resource.
+ */
+struct proc_action {
+  unsigned int pid;
+  unsigned int res_type;
+  enum res_action action;
+};
+
 int get_res_instance(struct res_node* res);
 
 #endif

@@ -21,7 +21,12 @@ int init_sem(int sem_id, int initial_val) {
   unsigned short values[1];
   values[0] = initial_val;
   argument.array = values;
-  return semctl(sem_id, 0, SETALL, argument);
+  int success = semctl(sem_id, 0, SETALL, argument);
+  if (success == -1) {
+    perror("Faled to initilaize binary semaphore");
+    exit(EXIT_FAILURE);
+  }
+  return success;
 }
 
 /**

@@ -13,13 +13,15 @@
 #include "ossshm.h"
 #include "resource.h"
 #include "myclock.h"
+#include "sem.h"
 
 /*---------*
  | GLOBALS |
  *---------*/
-struct my_clock* clock_shm = NULL;
-struct res_node* res_list = NULL;
-struct proc_node* proc_list = NULL;
+struct my_clock* clock_shm          = NULL;
+struct res_node* res_list           = NULL;
+struct proc_node* proc_list         = NULL;
+struct proc_action* proc_action_shm = NULL;
 
 static int should_terminate() {
   int should_terminate;
@@ -98,7 +100,9 @@ static void request_res(int pid, int num_res) {
   fprintf(stderr, "P%d requesting R%d\n", pid, res->type);
   
   // Make request
-  proc_list[pid].request = res->type;
+  proc_action_shm->pid = pid;
+  proc_action_shm->res_type = res->type;
+  proc_action_shm->action = REQUEST;
 
   // Find next available index
   int k = get_res_instance(res);
@@ -113,10 +117,10 @@ static void request_res(int pid, int num_res) {
 }
 
 int main(int argc, char* argv[]) {
-  if (argc != 8) {
+  if (argc != 9) {
     fprintf(
       stderr,
-      "Usage: %s pid bound num_res clock_seg_id res_list_id proc_list_id sem_id\n",
+      "Usage: %s pid bound num_res clock_seg_id res_list_id proc_list_id proc_action_id sem_id\n",
       argv[0]
     );
     return EXIT_FAILURE;
@@ -124,19 +128,21 @@ int main(int argc, char* argv[]) {
 
   srand(time(NULL));
 
-  const int pid           = atoi(argv[1]);
-  const int bound         = atoi(argv[2]);
-  const int num_res       = atoi(argv[3]);  // Number of resources
-  const int clock_id      = atoi(argv[4]);
-  const int res_list_id   = atoi(argv[5]);
-  const int proc_list_id  = atoi(argv[6]);
-  const int sem_id        = atoi(argv[7]);
+  const int pid             = atoi(argv[1]);
+  const int bound           = atoi(argv[2]);
+  const int num_res         = atoi(argv[3]);
+  const int clock_id        = atoi(argv[4]);
+  const int res_list_id     = atoi(argv[5]);
+  const int proc_list_id    = atoi(argv[6]);
+  const int proc_action_id  = atoi(argv[7]);
+  const int sem_id          = atoi(argv[8]);
 
   signal(SIGTERM, detach_from_shm);
 
   clock_shm = attach_to_clock_shm(clock_id);
   res_list = attach_to_res_list(res_list_id);
   proc_list = attach_to_proc_list(proc_list_id);
+  proc_action_shm = attach_to_proc_action(proc_action_id);
 
   // When should process request / release a resource
   struct my_clock res_time = get_rand_future_time(bound);
@@ -149,8 +155,10 @@ int main(int argc, char* argv[]) {
     // Every 1 to bound ms, check should request /
     // release a resource
     if (is_past_time(res_time)) {
-      request_res(pid, num_res);
       fprintf(stderr, "Requesting / releasing a resource\n");
+      sem_wait(sem_id);
+      request_res(pid, num_res);
+      sem_post(sem_id);
       res_time = get_rand_future_time(bound);
     }
 

@@ -147,3 +147,49 @@ int detach_from_proc_list(struct proc_node* shm) {
   }
   return success;
 }
+
+/**
+ * Allocates shared memory for a process action.
+ * 
+ * @return The shared memory segment ID
+ */
+int get_proc_action() {
+  int id = shmget(IPC_PRIVATE, sizeof(struct proc_action),
+    IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+
+  if (id == -1) {
+    perror("Failed to get shared memory for process action");
+    exit(EXIT_FAILURE);
+  }
+  return id;
+}
+
+/**
+ * Attaches to a process action shared memory segment.
+ * 
+ * @return A pointer to a process action in shared memory.
+ */
+struct proc_action* attach_to_proc_action(int id) {
+  void* shm = shmat(id, NULL, 0);
+
+  if (*((int*) shm) == -1) {
+    perror("Failed to attach to shared memory for process action");
+    exit(EXIT_FAILURE);
+  }
+
+  return (struct proc_action*) shm;
+}
+
+/**
+ * Detaches from process action in shared memory.
+ * 
+ * @param Process action in shared memory
+ * @return On success, 0. On error -1.
+ */
+int detach_from_proc_action(struct proc_action* shm) {
+  int success = shmdt(shm);
+  if (success == -1) {
+    perror("Failed to detach from process action shared memory");
+  }
+  return success;
+}

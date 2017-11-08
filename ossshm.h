@@ -20,4 +20,8 @@ int get_proc_list(int num_proc);
 struct proc_node* attach_to_proc_list(int id);
 int detach_from_proc_list(struct proc_node* shm);
 
+int get_proc_action();
+struct proc_action* attach_to_proc_action(int id);
+int detach_from_proc_action(struct proc_action* shm);
+
 #endif

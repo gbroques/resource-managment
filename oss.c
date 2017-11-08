@@ -46,6 +46,9 @@ static struct res_node* res_list;
 static int proc_list_id;
 static struct proc_node* proc_list;
 
+static int proc_action_id;
+static struct proc_action* proc_action_shm;
+
 static int sem_id;
 
 int main(int argc, char* argv[]) {
@@ -114,7 +117,13 @@ int main(int argc, char* argv[]) {
   proc_list = attach_to_proc_list(proc_list_id);
   init_proc_list(proc_list);
 
+  proc_action_id = get_proc_action();
+  proc_action_shm = attach_to_proc_action(proc_action_id);
+  init_proc_action(proc_action_shm);
+
   sem_id = allocate_sem(IPC_PRIVATE, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+
+  init_sem(sem_id, 1);
 
   // Initialize clock to 1 second to simulate overhead
   clock_shm->secs = 1;
@@ -133,19 +142,21 @@ int main(int argc, char* argv[]) {
       clock_shm->nanosecs += 4;
     }
 
-    // Check for requests
-    int i = 0;
-    for (; i < MAX_PROC; i++) {
-      struct proc_node* proc = proc_list + i;
-      if (proc->request != -1 && can_grant_request(proc->request)) {
-        fprintf(stderr, "Granting P%d request for R%d\n", i, proc->request);
+    // Check for resource requests and releases
+    if (is_proc_action_available(proc_action_shm)) {
+      struct proc_node* proc = proc_list + proc_action_shm->pid;
+      struct res_node* res = res_list + proc_action_shm->res_type;
+      proc->request = res->type;
+      if (can_grant_request(res->type)) {
+        fprintf(stderr, "Granting P%d request for R%d\n", proc->id, res->type);
         num_grants++;
-        struct res_node* res = res_list + proc->request;
-        int k = get_res_instance(res);
+        int i = get_res_instance(res);
         proc->request = -1;
-        res->held_by[k] = i;
-      } 
-      clock_shm->nanosecs += 4;
+        res->held_by[i] = proc->id;
+
+        // Reset process action
+        init_proc_action(proc_action_shm);
+      }
     }
   }
 
@@ -166,6 +177,9 @@ static void free_shm(void) {
 
   detach_from_proc_list(proc_list);
   shmctl(proc_list_id, IPC_RMID, 0);
+
+  detach_from_proc_action(proc_action_shm);
+  shmctl(proc_action_id, IPC_RMID, 0);
 
   deallocate_sem(sem_id);
 }
@@ -298,6 +312,12 @@ static void fork_and_exec_child(int index) {
              "%d",
              proc_list_id);
 
+    char proc_action_id_str[12];
+    snprintf(proc_action_id_str,
+             sizeof(proc_action_id_str),
+             "%d",
+             proc_action_id);
+
     char sem_id_str[12];
     snprintf(sem_id_str,
              sizeof(sem_id_str),
@@ -312,6 +332,7 @@ static void fork_and_exec_child(int index) {
            clock_id_str,
            res_list_id_str,
            proc_list_id_str,
+           proc_action_id_str,
            sem_id_str,
            (char*) NULL);
     perror("Failed to exec");
@@ -392,4 +413,14 @@ static void kill_children() {
 static int can_grant_request(int request) {
   int i = get_res_instance(res_list + request);
   return i != -1 ? 1 : 0;
+}
+
+static void init_proc_action(struct proc_action* pa) {
+  pa->pid = -10;
+  pa->res_type = -10;
+  pa->action = IDLE;
+}
+
+static int is_proc_action_available(struct proc_action* pa) {
+  return pa->pid != -10 && pa->res_type != -10 && pa->action != IDLE;
 }
