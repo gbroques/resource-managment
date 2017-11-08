@@ -146,16 +146,44 @@ int main(int argc, char* argv[]) {
     if (is_proc_action_available(proc_action_shm)) {
       struct proc_node* proc = proc_list + proc_action_shm->pid;
       struct res_node* res = res_list + proc_action_shm->res_type;
+      enum res_action action = proc_action_shm->action;
+
       proc->request = res->type;
-      if (can_grant_request(res->type)) {
-        fprintf(stderr, "Granting P%d request for R%d\n", proc->id, res->type);
+
+      if (action == REQUEST && can_grant_request(res->type)) {
+        fprintf(stderr,
+                "Granting P%d request for R%d\n",
+                proc->id,
+                res->type);
         num_grants++;
         int i = get_res_instance(res);
         proc->request = -1;
+        res->num_allocated++;
         res->held_by[i] = proc->id;
+        proc->holds[i] = res->type;
 
         // Reset process action
         init_proc_action(proc_action_shm);
+      } else if (action == RELEASE && has_resource(proc->id)) {
+        fprintf(stderr,
+                "Granting P%d request to release R%d\n",
+                proc->id,
+                res->type);
+        int i = 0;
+        while (proc->holds[i] != -1) {
+          i++;
+        }
+        res->num_allocated--;
+        res->held_by[--i] = -1;
+        proc->holds[i] = -1;
+
+        // Reset process action
+        init_proc_action(proc_action_shm);
+      } else {
+        // fprintf(stderr,
+        //         "OSS cannot grant P%d request to claim / release R%d\n",
+        //         proc->id,
+        //         res->type);
       }
     }
   }
@@ -378,6 +406,10 @@ static void init_proc_list(struct proc_node* proc_list) {
   for (; i < MAX_PROC; i++) {
     proc_list[i].id = i;
     proc_list[i].request = -1;
+    int j = 0;
+    for (; j < MAX_HOLDS; j++) {
+      proc_list[i].holds[j] = -1;
+    }
   }
 }
 
@@ -423,4 +455,8 @@ static void init_proc_action(struct proc_action* pa) {
 
 static int is_proc_action_available(struct proc_action* pa) {
   return pa->pid != -10 && pa->res_type != -10 && pa->action != IDLE;
+}
+
+static int has_resource(int pid) {
+  return (proc_list + pid)->holds[0] != -1 ? 1 : 0;
 }

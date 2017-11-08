@@ -2,6 +2,7 @@
 #define RESOURCE_H
 
 #define MAX_INSTANCES 10
+#define MAX_HOLDS     256
 
 struct res_node {
   unsigned int type;
@@ -14,10 +15,11 @@ struct res_node {
 struct proc_node {
   unsigned int id;
   int request;
+  int holds[MAX_HOLDS];
 };
 
 enum res_action {
-  IDLE,     // No action to be taken
+  IDLE,     // No action to be taken (default state)
   REQUEST,  // Request the resource
   RELEASE   // Release the resource
 };

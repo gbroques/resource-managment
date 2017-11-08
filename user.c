@@ -86,11 +86,18 @@ static void detach_from_shm() {
     detach_from_res_list(res_list);
   if (proc_list != NULL)
     detach_from_proc_list(proc_list);
+  if (proc_action_shm != NULL) {
+    detach_from_proc_action(proc_action_shm);
+  }
 }
 
 static int is_past_time(struct my_clock myclock) {
   return (clock_shm->secs     >= myclock.secs &&
           clock_shm->nanosecs >= myclock.nanosecs);
+}
+
+int has_resource(int pid) {
+  return (proc_list + pid)->holds[0] != -1 ? 1 : 0;
 }
 
 static void request_res(int pid, int num_res) {
@@ -114,6 +121,32 @@ static void request_res(int pid, int num_res) {
   // Wait until request is granted
   while (res->held_by[k] == -1);
   fprintf(stderr, "P%d request for R%d granted!\n", pid, res->type);
+}
+
+/**
+ * Release the last request resource
+ *
+ * @param pid The ID of the process releasing the resource
+ */
+static void release_res(int pid) {
+  if (has_resource(pid)) {
+    struct proc_node* proc = proc_list + pid;
+    int i = 0;
+    while (proc->holds[i] != -1) {
+      i++;
+    }
+    i--;
+    fprintf(stderr, "P%d requesting to release R%d\n", pid, proc->holds[i]);
+
+    // Make request
+    proc_action_shm->pid = pid;
+    proc_action_shm->res_type = proc->holds[i];
+    proc_action_shm->action = RELEASE;
+
+    // Wait until request is granted
+    while (proc->holds[i] != -1);
+
+  }
 }
 
 int main(int argc, char* argv[]) {
@@ -157,7 +190,12 @@ int main(int argc, char* argv[]) {
     if (is_past_time(res_time)) {
       fprintf(stderr, "Requesting / releasing a resource\n");
       sem_wait(sem_id);
-      request_res(pid, num_res);
+        int action = rand() % 2;
+        if (action == 1 && has_resource(pid)) {
+          release_res(pid);
+        } else {
+          request_res(pid, num_res);
+        }
       sem_post(sem_id);
       res_time = get_rand_future_time(bound);
     }

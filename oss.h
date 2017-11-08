@@ -42,5 +42,6 @@ static void init_proc_action(struct proc_action* pa);
 static void kill_children();
 static int can_grant_request(int request);
 static int is_proc_action_available(struct proc_action* pa);
+static int has_resource(int pid);
 
 #endif
