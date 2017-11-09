@@ -2,28 +2,8 @@
 #define OSS_H
 
 #include "resource.h"
+#include "myclock.h"
 
-/**************
- * STRUCTURES *
- **************/
-
-
-
-// =================================================================
-
-
-/*************
- * CONSTANTS *
- *************/
-
-
-
-// =================================================================
-
-
-/**************
- * PROTOTYPES *
- **************/
 static int setup_interrupt(void);
 static int setup_interval_timer(int time);
 static void free_shm(void);
@@ -46,5 +26,9 @@ static int has_resource(int pid);
 static void print_res_alloc_table(void);
 static void reset_term_pid(int* term_pid);
 static void release_res(int pid);
+static int is_past_time(struct my_clock myclock);
+int get_rand_millisecs(int bound);
+struct my_clock get_time_to_fork();
+static int get_next_available_pid();
 
 #endif

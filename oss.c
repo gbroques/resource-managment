@@ -33,7 +33,7 @@
 /*---------*
  | GLOBALS |
  *---------*/
-char* bound = "250";  // in milliseconds
+char* bound = "50";  // in milliseconds
 
 pid_t children[MAX_PROC];
 
@@ -128,8 +128,6 @@ int main(int argc, char* argv[]) {
   res_list = attach_to_res_list(res_list_id);
   init_res_list(res_list);
 
-  print_res_list(res_list);
-
   proc_list_id = get_proc_list(MAX_PROC);
   proc_list = attach_to_proc_list(proc_list_id);
   init_proc_list(proc_list);
@@ -153,18 +151,31 @@ int main(int argc, char* argv[]) {
   // Initialize clock to 1 second to simulate overhead
   clock_shm->secs = 1;
 
+  // Initialize children PIDs to -10
+  int k = 0;
+  for (; k < MAX_PROC; k++)
+    children[k] = -10;
+
+
   fork_and_exec_child(0);
 
+  struct my_clock fork_time = get_time_to_fork();
+
   while (1) {
-    if (clock_shm->nanosecs % 100000000 == 0) {
-      fprintf(stderr, "[%02d:%010d]\n", clock_shm->secs, clock_shm->nanosecs);
-    }
     if (clock_shm->nanosecs >= NANOSECS_PER_SEC) {
       clock_shm->secs += 1;
       clock_shm->nanosecs = 0;
     } else {
       // Add 4 for more realistic clock
-      clock_shm->nanosecs += 4;
+      clock_shm->nanosecs += 8;
+    }
+
+    if (is_past_time(fork_time)) {
+      int pid = get_next_available_pid();
+      if (pid != -10) {
+        fork_and_exec_child(pid);
+        fork_time = get_time_to_fork();
+      }
     }
 
     // Check for resource requests and releases
@@ -184,7 +195,7 @@ int main(int argc, char* argv[]) {
               action_str,
               res->type);
 
-      clock_shm->nanosecs += 4;
+      clock_shm->nanosecs += 8;
 
       // Grant requests to claim or release resources
       if (action == REQUEST && can_grant_request(res->type)) {
@@ -226,7 +237,7 @@ int main(int argc, char* argv[]) {
                 res->type);
       }
 
-      clock_shm->nanosecs += 4;
+      clock_shm->nanosecs += 8;
 
       fprintf(stderr,
               "[%02d:%010d] %d instance(s) of R%02d left\n",
@@ -340,6 +351,8 @@ static int is_required_argument(char optopt) {
   switch (optopt) {
     case 'l':
       return 1;
+    case 'b':
+      return 1;
     default:
       return 0;
   }
@@ -380,6 +393,12 @@ static void fork_and_exec_child(int index) {
   }
 
   if (children[index] == 0) {  // Child
+    char pid_str[12];
+    snprintf(pid_str,
+             sizeof(pid_str),
+             "%d",
+             index);
+
     char num_res_str[12];
     snprintf(num_res_str,
              sizeof(num_res_str),
@@ -430,7 +449,7 @@ static void fork_and_exec_child(int index) {
 
     execlp("user",
            "user",
-           "0",
+           pid_str,
            bound,
            num_res_str,
            clock_id_str,
@@ -515,9 +534,9 @@ static void print_res_node(struct res_node node) {
 
 static void kill_children() {
   int i = 0;
-  for (; i < MAX_PROC; i++) {
-    kill(children[i], SIGKILL);
-  }
+  for (; i < MAX_PROC; i++)
+    if (children[i] != -10)
+      kill(children[i], SIGKILL);
 }
 
 static int can_grant_request(int request) {
@@ -544,10 +563,15 @@ static int has_resource(int pid) {
  */
 static void print_res_alloc_table(void) {
   // Print header row
-  fprintf(stderr, "    ");
+  fprintf(stderr, "\n    ");
   int i = 0;
   for (; i < NUM_RES; i++)
     fprintf(stderr, "R%02d ", i);
+  fprintf(stderr, "\n");
+
+  i = 0;
+  for (; i < ((NUM_RES + 1) * 4); i++)
+    fprintf(stderr, "-");
   fprintf(stderr, "\n");
 
   // Print how many resources each process holds
@@ -566,6 +590,7 @@ static void print_res_alloc_table(void) {
     }
     fprintf(stderr, "\n");
   }
+  fprintf(stderr, "\n");
 }
 
 
@@ -591,12 +616,54 @@ static void release_res(int pid) {
       struct res_node* res = res_list + i;
       if (res->held_by[j] == pid)
         res->held_by[j] = -1;
+      clock_shm->nanosecs += 8;
     }
+    clock_shm->nanosecs += 8;
   }
   struct proc_node* proc = proc_list + pid;
   int k = 0;
   while (proc->holds[k] != -1) {
     proc->holds[k] = -1;
     k++;
+    clock_shm->nanosecs += 8;
   }
+}
+
+static int is_past_time(struct my_clock myclock) {
+  return (clock_shm->secs     >= myclock.secs &&
+          clock_shm->nanosecs >= myclock.nanosecs);
+}
+
+/**
+ * Get a random amount of milliseconds
+ *
+ * @param bound Maximum bound in millisecons
+ * @return Random amount of milliseconds in nanoseconds
+ */
+int get_rand_millisecs(int bound) {
+  return (rand() % bound + 1) * NANOSECS_PER_MILLISEC;
+}
+
+/**
+ * Get a time to fork a new child process,
+ * 1 to 500 milliseconds into the future.
+ */
+struct my_clock get_time_to_fork() {
+  struct my_clock fork_time;
+  fork_time.secs     = clock_shm->secs;
+  fork_time.nanosecs = clock_shm->nanosecs;
+  int time_to_fork = get_rand_millisecs(500);
+  fork_time = add_nanosecs_to_clock(fork_time, time_to_fork);
+  return fork_time;
+}
+
+static int get_next_available_pid() {
+  int i = 0;
+  while (children[i++] != -10)
+    clock_shm->nanosecs += 8;
+  
+  if (i == MAX_PROC)
+    return -10;
+  
+  return --i;
 }
