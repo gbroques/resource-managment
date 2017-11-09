@@ -39,6 +39,7 @@ pid_t children[MAX_PROC];
 
 static FILE* fp;
 
+// Shared Memory Globals
 static int clock_id;
 static struct my_clock* clock_shm;
 
@@ -51,9 +52,14 @@ static struct proc_node* proc_list;
 static int proc_action_id;
 static struct proc_action* proc_action_shm;
 
+static int term_pid_id;
+static int* term_pid;
+
+// Semaphore for claiming / releasing resources
 static int sem_id;
 
-static void print_table(void);
+// Semaphore for communicating a process is terminating
+static int term_sem_id;
 
 int main(int argc, char* argv[]) {
   int help_flag = 0;
@@ -132,9 +138,17 @@ int main(int argc, char* argv[]) {
   proc_action_shm = attach_to_proc_action(proc_action_id);
   init_proc_action(proc_action_shm);
 
-  sem_id = allocate_sem(IPC_PRIVATE, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+  term_pid_id = get_int_shm();
+  term_pid = attach_to_int_shm(term_pid_id);
 
+  // Initialize to a value not equal to a PID
+  reset_term_pid(term_pid);
+
+  sem_id = allocate_sem(IPC_PRIVATE, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
   init_sem(sem_id, 1);
+
+  term_sem_id = allocate_sem(IPC_PRIVATE, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+  init_sem(term_sem_id, 1);
 
   // Initialize clock to 1 second to simulate overhead
   clock_shm->secs = 1;
@@ -172,6 +186,7 @@ int main(int argc, char* argv[]) {
 
       clock_shm->nanosecs += 4;
 
+      // Grant requests to claim or release resources
       if (action == REQUEST && can_grant_request(res->type)) {
         fprintf(stderr,
                 "[%02d:%010d] Granting P%02d request for R%02d\n",
@@ -186,7 +201,7 @@ int main(int argc, char* argv[]) {
         res->held_by[i] = proc->id;
         proc->holds[i] = res->type;
         if (num_grants % 20 == 0 && num_grants != 0) {
-          print_table();
+          print_res_alloc_table();
         }
       } else if (action == RELEASE && has_resource(proc->id)) {
         fprintf(stderr,
@@ -223,6 +238,13 @@ int main(int argc, char* argv[]) {
       // Reset process action
       init_proc_action(proc_action_shm);
     }
+
+    // Check for terminating processes
+    if (*term_pid != -10) {
+      // Release all resources held by process
+      release_res(*term_pid);
+      reset_term_pid(term_pid);  // Set back to -10
+    }
   }
 
   free_shm();
@@ -246,7 +268,12 @@ static void free_shm(void) {
   detach_from_proc_action(proc_action_shm);
   shmctl(proc_action_id, IPC_RMID, 0);
 
+  detach_from_int_shm(term_pid);
+  shmctl(term_pid_id, IPC_RMID, 0);
+
   deallocate_sem(sem_id);
+
+  deallocate_sem(term_sem_id);
 }
 
 /**
@@ -383,11 +410,23 @@ static void fork_and_exec_child(int index) {
              "%d",
              proc_action_id);
 
+    char term_pid_id_str[12];
+    snprintf(term_pid_id_str,
+             sizeof(term_pid_id_str),
+             "%d",
+             term_pid_id);
+
     char sem_id_str[12];
     snprintf(sem_id_str,
              sizeof(sem_id_str),
              "%d",
              sem_id);
+
+    char term_sem_id_str[12];
+    snprintf(term_sem_id_str,
+             sizeof(term_sem_id_str),
+             "%d",
+             term_sem_id);
 
     execlp("user",
            "user",
@@ -398,7 +437,9 @@ static void fork_and_exec_child(int index) {
            res_list_id_str,
            proc_list_id_str,
            proc_action_id_str,
+           term_pid_id_str,
            sem_id_str,
+           term_sem_id_str,
            (char*) NULL);
     perror("Failed to exec");
     _exit(EXIT_FAILURE);
@@ -498,7 +539,10 @@ static int has_resource(int pid) {
   return (proc_list + pid)->holds[0] != -1 ? 1 : 0;
 }
 
-static void print_table(void) {
+/**
+ * Print resource allocation table
+ */
+static void print_res_alloc_table(void) {
   // Print header row
   fprintf(stderr, "    ");
   int i = 0;
@@ -522,5 +566,37 @@ static void print_table(void) {
     }
     fprintf(stderr, "\n");
   }
+}
 
+
+/**
+ * Resets the value of the terminating PID to -10
+ *
+ * @param[in] Pointer to terminating PID
+ */
+static void reset_term_pid(int* term_pid) {
+  *term_pid = -10;
+}
+
+/**
+ * Releases all resources for a given PID.
+ *
+ * @param pid The ID of the process
+ */
+static void release_res(int pid) {
+  int i = 0;
+  for (; i < NUM_RES; i++) {
+    int j = 0;
+    for (; j < MAX_INSTANCES; j++) {
+      struct res_node* res = res_list + i;
+      if (res->held_by[j] == pid)
+        res->held_by[j] = -1;
+    }
+  }
+  struct proc_node* proc = proc_list + pid;
+  int k = 0;
+  while (proc->holds[k] != -1) {
+    proc->holds[k] = -1;
+    k++;
+  }
 }

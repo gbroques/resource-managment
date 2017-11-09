@@ -193,3 +193,49 @@ int detach_from_proc_action(struct proc_action* shm) {
   }
   return success;
 }
+
+/**
+ * Allocates shared memory for an integer.
+ * 
+ * @return The shared memory segment ID
+ */
+int get_int_shm(void) {
+  int id = shmget(IPC_PRIVATE, sizeof(int),
+    IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+
+  if (id == -1) {
+    perror("Failed to get shared memory for int");
+    exit(EXIT_FAILURE);
+  }
+  return id;
+}
+
+/**
+ * Attaches to an int shared memory segment.
+ * 
+ * @return A pointer to an int in shared memory.
+ */
+int* attach_to_int_shm(int id) {
+  int* shm = shmat(id, NULL, 0);
+
+  if (*shm == -1) {
+    perror("Failed to attach to int shared memory");
+    exit(EXIT_FAILURE);
+  }
+
+  return shm;
+}
+
+/**
+ * Detaches from an int in shared memory.
+ * 
+ * @param Int shared memory
+ * @return On success, 0. On error -1.
+ */
+int detach_from_int_shm(int* shm) {
+  int success = shmdt(shm);
+  if (success == -1) {
+    perror("Failed to detach from int shared memory");
+  }
+  return success;
+}

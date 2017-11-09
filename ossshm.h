@@ -24,4 +24,9 @@ int get_proc_action();
 struct proc_action* attach_to_proc_action(int id);
 int detach_from_proc_action(struct proc_action* shm);
 
+int get_int_shm();
+int* attach_to_int_shm(int id);
+int detach_from_int_shm(int* shm);
+
+
 #endif

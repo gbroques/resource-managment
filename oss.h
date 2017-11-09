@@ -43,5 +43,8 @@ static void kill_children();
 static int can_grant_request(int request);
 static int is_proc_action_available(struct proc_action* pa);
 static int has_resource(int pid);
+static void print_res_alloc_table(void);
+static void reset_term_pid(int* term_pid);
+static void release_res(int pid);
 
 #endif

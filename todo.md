@@ -7,6 +7,10 @@
 * Fork multiple children at random times
   * Between 1 and 500 ms of logical clock
 * ~~Every 20 requests granted, output table showing the current resources allocated to each process~~
+* Periodically run deadlock detection algorithm
+  * Kill processes on by one until deadlock is resolved
+  * Release any resources before termination
+  * Document policy used to kill processes
 * Output to log file and add verbose setting
 
 # USER
@@ -15,5 +19,5 @@
 * ~~Make the request through shared memory~~
 * ~~Enter a loop and keep checking to see if request is granted~~
 * ~~Every 0 to 250 ms check if the the process should terminate~~
-* If so, deallocate all resources by communicating to master that it's releasing all of those resources
+* ~~If so, deallocate all resources by communicating to master that it's releasing all of those resources~~
 * Make sure the probability is low enough for churn to happen

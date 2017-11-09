@@ -15,13 +15,19 @@
 #include "myclock.h"
 #include "sem.h"
 
-/*---------*
- | GLOBALS |
- *---------*/
+/*-----------------------*
+ | Shared Memory Globals |
+ *-----------------------*/
 struct my_clock* clock_shm          = NULL;
 struct res_node* res_list           = NULL;
 struct proc_node* proc_list         = NULL;
 struct proc_action* proc_action_shm = NULL;
+int* term_pid                       = NULL;
+
+// Globals
+int pid = -20;
+int term_sem_id = -20;
+int term_pid_id = -20;
 
 static int should_terminate() {
   int should_terminate;
@@ -34,6 +40,14 @@ static int should_terminate() {
   } while (should_terminate == 1 && i < tries);
 
   return should_terminate;
+}
+
+static int past_initialization() {
+  return (
+    pid != -20 &&
+    term_sem_id != -20 &&
+    term_pid_id != -20
+  );
 }
 
 /**
@@ -76,9 +90,14 @@ struct my_clock get_rand_future_time(int bound) {
 }
 
 static void detach_from_shm() {
-  // TODO:
-  // Deallocate resources by communicating to master that
-  // it's releasing all of those resources
+  if (past_initialization()) {
+    // Communicate to OSS to release all resources
+    sem_wait(term_sem_id);
+      *term_pid = pid;
+      // Wait until OSS releases resources
+      while (*term_pid != -10);
+    sem_post(term_pid_id);
+  }
 
   if (clock_shm != NULL)
     detach_from_clock_shm(clock_shm);
@@ -86,9 +105,10 @@ static void detach_from_shm() {
     detach_from_res_list(res_list);
   if (proc_list != NULL)
     detach_from_proc_list(proc_list);
-  if (proc_action_shm != NULL) {
+  if (proc_action_shm != NULL)
     detach_from_proc_action(proc_action_shm);
-  }
+  if (term_pid != NULL)
+    detach_from_int_shm(term_pid);
 }
 
 static int is_past_time(struct my_clock myclock) {
@@ -160,25 +180,24 @@ static void release_res(int pid) {
 }
 
 int main(int argc, char* argv[]) {
-  if (argc != 9) {
-    fprintf(
-      stderr,
-      "Usage: %s pid bound num_res clock_seg_id res_list_id proc_list_id proc_action_id sem_id\n",
-      argv[0]
-    );
+  // TODO: Reduce the number of args by putting them into a struct
+  if (argc != 11) {
+    fprintf(stderr, "Invalid number of arguments\n");
     return EXIT_FAILURE;
   }
 
   srand(time(NULL));
 
-  const int pid             = atoi(argv[1]);
+  pid                       = atoi(argv[1]);
   const int bound           = atoi(argv[2]);
   const int num_res         = atoi(argv[3]);
   const int clock_id        = atoi(argv[4]);
   const int res_list_id     = atoi(argv[5]);
   const int proc_list_id    = atoi(argv[6]);
   const int proc_action_id  = atoi(argv[7]);
-  const int sem_id          = atoi(argv[8]);
+  term_pid_id               = atoi(argv[8]);
+  const int sem_id          = atoi(argv[9]);
+  term_sem_id               = atoi(argv[10]);
 
   signal(SIGTERM, detach_from_shm);
 
@@ -186,6 +205,7 @@ int main(int argc, char* argv[]) {
   res_list = attach_to_res_list(res_list_id);
   proc_list = attach_to_proc_list(proc_list_id);
   proc_action_shm = attach_to_proc_action(proc_action_id);
+  term_pid = attach_to_int_shm(term_pid_id);
 
   // When should process request / release a resource
   struct my_clock res_time = get_rand_future_time(bound);
