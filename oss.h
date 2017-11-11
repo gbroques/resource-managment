@@ -25,10 +25,15 @@ static int is_proc_action_available(struct proc_action* pa);
 static int has_resource(int pid);
 static void print_res_alloc_table(void);
 static void reset_term_pid(int* term_pid);
-static void release_res(int pid);
+static void release_res(int pid, int* released_res, int num_res);
 static int is_past_time(struct my_clock myclock);
 int get_rand_millisecs(int bound);
 struct my_clock get_time_to_fork();
 static int get_next_available_pid();
+struct my_clock get_time_to_detect_deadlock(int bound);
+static void detect_deadlock(int res_type, int pid);
+static void increment_clock(void);
+static void kill_child(int pid);
+static void print_released_res(int* released_res, int num_res);
 
 #endif

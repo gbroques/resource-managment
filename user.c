@@ -150,7 +150,6 @@ static void request_res(int pid, int num_res) {
 
   // Wait until request is granted
   while (res->held_by[k] == -1);
-  // fprintf(stderr, "P%d request for R%d granted!\n", pid, res->type);
 }
 
 /**
@@ -166,7 +165,6 @@ static void release_res(int pid) {
       i++;
     }
     i--;
-    // fprintf(stderr, "P%d requesting to release R%d\n", pid, proc->holds[i]);
 
     // Make request
     proc_action_shm->pid = pid;
@@ -218,7 +216,6 @@ int main(int argc, char* argv[]) {
     // Every 1 to bound ms, check should request /
     // release a resource
     if (is_past_time(res_time)) {
-      // fprintf(stderr, "Requesting / releasing a resource\n");
       sem_wait(sem_id);
         int action = rand() % 2;
         if (action == 1 && has_resource(pid)) {
@@ -233,7 +230,6 @@ int main(int argc, char* argv[]) {
     // Every 1 to 250 ms, check should terminate
     if (is_past_time(check_time)) {
       is_terminating = should_terminate();
-      // fprintf(stderr, "Checking should terminate %d\n", is_terminating);
       check_time = get_rand_future_time(250);
     }
   }

@@ -28,6 +28,7 @@
 
 #define NUM_RES 20
 #define MAX_PROC 18
+#define MAX_PIDS 256
 #define MAX_RUN_TIME 2  // in seconds
 
 /*---------*
@@ -35,7 +36,7 @@
  *---------*/
 char* bound = "50";  // in milliseconds
 
-pid_t children[MAX_PROC];
+pid_t children[MAX_PIDS];
 
 static FILE* fp;
 
@@ -60,6 +61,8 @@ static int sem_id;
 
 // Semaphore for communicating a process is terminating
 static int term_sem_id;
+
+static int num_procs = 0;
 
 int main(int argc, char* argv[]) {
   int help_flag = 0;
@@ -128,7 +131,7 @@ int main(int argc, char* argv[]) {
   res_list = attach_to_res_list(res_list_id);
   init_res_list(res_list);
 
-  proc_list_id = get_proc_list(MAX_PROC);
+  proc_list_id = get_proc_list(MAX_PIDS);
   proc_list = attach_to_proc_list(proc_list_id);
   init_proc_list(proc_list);
 
@@ -153,30 +156,29 @@ int main(int argc, char* argv[]) {
 
   // Initialize children PIDs to -10
   int k = 0;
-  for (; k < MAX_PROC; k++)
+  for (; k < MAX_PIDS; k++)
     children[k] = -10;
-
 
   fork_and_exec_child(0);
 
   struct my_clock fork_time = get_time_to_fork();
+  // struct my_clock dd_time = get_time_to_detect_deadlock(atoi(bound));
 
   while (1) {
-    if (clock_shm->nanosecs >= NANOSECS_PER_SEC) {
-      clock_shm->secs += 1;
-      clock_shm->nanosecs = 0;
-    } else {
-      // Add 4 for more realistic clock
-      clock_shm->nanosecs += 8;
-    }
+    increment_clock();
 
     if (is_past_time(fork_time)) {
       int pid = get_next_available_pid();
-      if (pid != -10) {
+      if (pid != -10 && num_procs < MAX_PIDS) {
         fork_and_exec_child(pid);
         fork_time = get_time_to_fork();
       }
     }
+
+    // if (is_past_time(dd_time)) {
+    //   detect_deadlock();
+    //   dd_time = get_time_to_detect_deadlock(atoi(bound));
+    // }
 
     // Check for resource requests and releases
     if (is_proc_action_available(proc_action_shm)) {
@@ -195,7 +197,7 @@ int main(int argc, char* argv[]) {
               action_str,
               res->type);
 
-      clock_shm->nanosecs += 8;
+      increment_clock();
 
       // Grant requests to claim or release resources
       if (action == REQUEST && can_grant_request(res->type)) {
@@ -229,15 +231,10 @@ int main(int argc, char* argv[]) {
         res->held_by[--i] = -1;
         proc->holds[i] = -1;
       } else if ((res->num_instances - res->num_allocated) == 0) {
-        fprintf(stderr,
-                "[%02d:%010d] P%02d deadlocked waiting for R%02d\n",
-                clock_shm->secs,
-                clock_shm->nanosecs,
-                proc->id,
-                res->type);
+        detect_deadlock(res->type, proc->id);
       }
 
-      clock_shm->nanosecs += 8;
+      increment_clock();
 
       fprintf(stderr,
               "[%02d:%010d] %d instance(s) of R%02d left\n",
@@ -253,7 +250,15 @@ int main(int argc, char* argv[]) {
     // Check for terminating processes
     if (*term_pid != -10) {
       // Release all resources held by process
-      release_res(*term_pid);
+      int released_res[NUM_RES];
+      release_res(*term_pid, released_res, NUM_RES);
+      fprintf(stderr,
+              "[%02d:%010d] Detected P%02d is terminating\n",
+              clock_shm->secs,
+              clock_shm->nanosecs,
+              *term_pid);
+      print_released_res(released_res, NUM_RES);
+      kill_child(*term_pid);
       reset_term_pid(term_pid);  // Set back to -10
     }
   }
@@ -385,6 +390,7 @@ static void print_required_argument_message(char option) {
  * @param index Index of children PID array
  */
 static void fork_and_exec_child(int index) {
+  num_procs++;
   children[index] = fork();
 
   if (children[index] == -1) {
@@ -500,7 +506,7 @@ static void init_res_list(struct res_node* res_list) {
  */
 static void init_proc_list(struct proc_node* proc_list) {
   int i = 0;
-  for (; i < MAX_PROC; i++) {
+  for (; i < MAX_PIDS; i++) {
     proc_list[i].id = i;
     proc_list[i].request = -1;
     int j = 0;
@@ -532,11 +538,16 @@ static void print_res_node(struct res_node node) {
   printf("\n");
 }
 
+/**
+ * Kills all remaining children
+ */
 static void kill_children() {
   int i = 0;
-  for (; i < MAX_PROC; i++)
-    if (children[i] != -10)
+  for (; i < MAX_PIDS; i++)
+    if (children[i] != -10) {
       kill(children[i], SIGKILL);
+      num_procs--;
+    }
 }
 
 static int can_grant_request(int request) {
@@ -576,19 +587,21 @@ static void print_res_alloc_table(void) {
 
   // Print how many resources each process holds
   i = 0;
-  for(; i < MAX_PROC; i++) {
-    fprintf(stderr, "P%02d  ", i);
-    int j = 0;
-    for (; j < NUM_RES; j++) {
-      int amt = 0;
-      int k = 0;
-      for (; k < MAX_INSTANCES; k++) {
-        if ((res_list + j)->held_by[k] == i)
-          amt++;
+  for(; i < MAX_PIDS; i++) {
+    if (children[i] != -10 && children[i] != -20) {
+      fprintf(stderr, "P%02d  ", i);
+      int j = 0;
+      for (; j < NUM_RES; j++) {
+        int amt = 0;
+        int k = 0;
+        for (; k < MAX_INSTANCES; k++) {
+          if ((res_list + j)->held_by[k] == i)
+            amt++;
+        }
+        fprintf(stderr, "%02d  ", amt);
       }
-      fprintf(stderr, "%02d  ", amt);
+      fprintf(stderr, "\n");
     }
-    fprintf(stderr, "\n");
   }
   fprintf(stderr, "\n");
 }
@@ -608,24 +621,30 @@ static void reset_term_pid(int* term_pid) {
  *
  * @param pid The ID of the process
  */
-static void release_res(int pid) {
+static void release_res(int pid,
+                        int* released_res,
+                        int num_res) {
   int i = 0;
-  for (; i < NUM_RES; i++) {
+  for (; i < num_res; i++) {
+    released_res[i] = 0;
     int j = 0;
     for (; j < MAX_INSTANCES; j++) {
       struct res_node* res = res_list + i;
-      if (res->held_by[j] == pid)
+      if (res->held_by[j] == pid) {
         res->held_by[j] = -1;
-      clock_shm->nanosecs += 8;
+        released_res[i]++;
+        res->num_allocated--;
+      }
+      increment_clock();
     }
-    clock_shm->nanosecs += 8;
+    increment_clock();
   }
   struct proc_node* proc = proc_list + pid;
   int k = 0;
-  while (proc->holds[k] != -1) {
+  while (proc->holds[k] != -1 && k < MAX_INSTANCES) {
     proc->holds[k] = -1;
     k++;
-    clock_shm->nanosecs += 8;
+    increment_clock();
   }
 }
 
@@ -646,13 +665,13 @@ int get_rand_millisecs(int bound) {
 
 /**
  * Get a time to fork a new child process,
- * 1 to 500 milliseconds into the future.
+ * 1 to 250 milliseconds into the future.
  */
 struct my_clock get_time_to_fork() {
   struct my_clock fork_time;
   fork_time.secs     = clock_shm->secs;
   fork_time.nanosecs = clock_shm->nanosecs;
-  int time_to_fork = get_rand_millisecs(500);
+  int time_to_fork = get_rand_millisecs(250);
   fork_time = add_nanosecs_to_clock(fork_time, time_to_fork);
   return fork_time;
 }
@@ -660,10 +679,87 @@ struct my_clock get_time_to_fork() {
 static int get_next_available_pid() {
   int i = 0;
   while (children[i++] != -10)
-    clock_shm->nanosecs += 8;
+    increment_clock();
   
-  if (i == MAX_PROC)
+  if (i == MAX_PIDS) {
+    fprintf(stderr, "MAXIMUM AMOUNT OF PROCESSES GENERATED ==== !!!!\n");
     return -10;
+  }
   
   return --i;
+}
+
+/**
+ * Get time to run deadlock detection algorithm
+ *
+ * @param bound
+ * @return Time to run deadlock detection algorithm
+ */
+struct my_clock get_time_to_detect_deadlock(int bound) {
+  struct my_clock dd_time;
+  dd_time.secs     = clock_shm->secs;
+  dd_time.nanosecs = clock_shm->nanosecs;
+  int time_to_run = (bound / 2) * (MAX_INSTANCES / 2);
+  time_to_run *= NANOSECS_PER_MILLISEC;
+  dd_time = add_nanosecs_to_clock(dd_time, time_to_run);
+  return dd_time;
+}
+
+static void detect_deadlock(int res_type, int pid) {
+  fprintf(stderr,
+          "[%02d:%010d] Running deadlock detection algorithm...\n",
+          clock_shm->secs,
+          clock_shm->nanosecs);
+
+  int i = 0;
+  struct res_node* res = res_list + res_type;
+  fprintf(stderr, "  Processes ");
+  for (; i < MAX_INSTANCES; i++)
+      if (res->held_by[i] != -1)
+        fprintf(stderr, "P%02d ", res->held_by[i]);
+  fprintf(stderr, "deadlocked\n");
+
+  fprintf(stderr, "  Attempting to resolve deadlock...\n");
+  fprintf(stderr, "  Killing P%d:\n", pid);
+  int released_res[NUM_RES];
+  release_res(pid, released_res, NUM_RES);
+  print_released_res(released_res, NUM_RES);
+  kill_child(pid);
+  fprintf(stderr, "  System is no longer in deadlock\n");
+}
+
+static void increment_clock() {
+  clock_shm->nanosecs += 50;
+  if (clock_shm->nanosecs >= NANOSECS_PER_SEC) {
+    clock_shm->secs += 1;
+    clock_shm->nanosecs = 0;
+  }
+}
+
+static void kill_child(int pid) {
+    kill(children[pid], SIGKILL);
+    children[pid] = -20;
+}
+
+static void print_released_res(int* released_res, int num_res) {
+  int has_released_res = 0;
+  int i = 0;
+  for (; i < num_res; i++)
+    if (released_res[i] != 0)
+      has_released_res = 1;
+
+  if (has_released_res) {
+    fprintf(stderr,
+            "    Resources released are as follows: ");
+    i = 0;
+    for (; i < num_res; i++) {
+      if (released_res[i] != 0) {
+        fprintf(stderr,
+                "R%02d:%d ",
+                i,
+                released_res[i]);
+      }
+    }
+    fprintf(stderr, "\n");
+  }
 }
