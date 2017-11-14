@@ -16,6 +16,7 @@ When the system deadlocks, we use a **LIFO** policy to determine which process t
 ## Arguments
 ```
  -h  Show help.
+ -v  Specify verbose log output
  -l  Specify the log file. Defaults to 'oss.out'.
  -b  Specify the upper bound for when processes should request or release a resource.
  ```

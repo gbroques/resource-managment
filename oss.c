@@ -66,14 +66,18 @@ static int num_procs = 0;
 
 int main(int argc, char* argv[]) {
   int help_flag = 0;
+  int verbose = 0;
   char* log_file = "oss.out";
   opterr = 0;
   int c;
 
-  while ((c = getopt(argc, argv, "hl:b:")) != -1) {
+  while ((c = getopt(argc, argv, "hvl:b:")) != -1) {
     switch (c) {
       case 'h':
         help_flag = 1;
+        break;
+      case 'v':
+        verbose = 1;
         break;
       case 'l':
         log_file = optarg;
@@ -189,40 +193,48 @@ int main(int argc, char* argv[]) {
 
       proc->request = res->type;
 
-      fprintf(fp,
-              "[%02d:%010d] Detected P%02d request to %s R%02d\n",
-              clock_shm->secs,
-              clock_shm->nanosecs,
-              proc->id,
-              action_str,
-              res->type);
+      if (verbose) {
+        fprintf(fp,
+                "[%02d:%010d] Detected P%02d request to %s R%02d\n",
+                clock_shm->secs,
+                clock_shm->nanosecs,
+                proc->id,
+                action_str,
+                res->type);
+      }
+
 
       increment_clock();
 
       // Grant requests to claim or release resources
       if (action == REQUEST && can_grant_request(res->type)) {
-        fprintf(fp,
-                "[%02d:%010d] Granting P%02d request for R%02d\n",
-                clock_shm->secs,
-                clock_shm->nanosecs,
-                proc->id,
-                res->type);
+        if (verbose) {
+          fprintf(fp,
+                    "[%02d:%010d] Granting P%02d request for R%02d\n",
+                    clock_shm->secs,
+                    clock_shm->nanosecs,
+                    proc->id,
+                    res->type);
+        }
         num_grants++;
         int i = get_res_instance(res);
         proc->request = -1;
         res->num_allocated++;
         res->held_by[i] = proc->id;
         proc->holds[i] = res->type;
-        if (num_grants % 20 == 0 && num_grants != 0) {
+        if (num_grants % 20 == 0 && num_grants != 0 && verbose) {
           print_res_alloc_table();
         }
       } else if (action == RELEASE && has_resource(proc->id)) {
-        fprintf(fp,
-                "[%02d:%010d] Granting P%02d request to release R%02d\n",
-                clock_shm->secs,
-                clock_shm->nanosecs,
-                proc->id,
-                res->type);
+        if (verbose) {
+          fprintf(fp,
+                  "[%02d:%010d] Granting P%02d request to release R%02d\n",
+                  clock_shm->secs,
+                  clock_shm->nanosecs,
+                  proc->id,
+                  res->type);
+        }
+        
         int i = 0;
         while (proc->holds[i] != -1) {
           i++;
@@ -245,12 +257,14 @@ int main(int argc, char* argv[]) {
       // Release all resources held by process
       int released_res[NUM_RES];
       release_res(*term_pid, released_res, NUM_RES);
-      fprintf(fp,
-              "[%02d:%010d] Detected P%02d is terminating\n",
-              clock_shm->secs,
-              clock_shm->nanosecs,
-              *term_pid);
-      print_released_res(released_res, NUM_RES);
+      if (verbose) {
+        fprintf(fp,
+                "[%02d:%010d] Detected P%02d is terminating\n",
+                clock_shm->secs,
+                clock_shm->nanosecs,
+                *term_pid);
+        print_released_res(released_res, NUM_RES);
+      }
       kill_child(*term_pid);
       reset_term_pid(term_pid);  // Set back to -10
     }
@@ -334,6 +348,7 @@ static void print_help_message(char* executable_name,
   printf("Usage: ./%s\n\n", executable_name);
   printf("Arguments:\n");
   printf(" -h  Show help.\n");
+  printf(" -v  Specify verbose log output.\n");
   printf(" -l  Specify the log file. Defaults to '%s'.\n", log_file);
   printf(" -b  Specify the upper bound for when processes should request or release a resource.\n");
   printf("     Defaults to %s milliseconds.\n", bound);
