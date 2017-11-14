@@ -189,7 +189,7 @@ int main(int argc, char* argv[]) {
 
       proc->request = res->type;
 
-      fprintf(stderr,
+      fprintf(fp,
               "[%02d:%010d] Detected P%02d request to %s R%02d\n",
               clock_shm->secs,
               clock_shm->nanosecs,
@@ -201,7 +201,7 @@ int main(int argc, char* argv[]) {
 
       // Grant requests to claim or release resources
       if (action == REQUEST && can_grant_request(res->type)) {
-        fprintf(stderr,
+        fprintf(fp,
                 "[%02d:%010d] Granting P%02d request for R%02d\n",
                 clock_shm->secs,
                 clock_shm->nanosecs,
@@ -217,7 +217,7 @@ int main(int argc, char* argv[]) {
           print_res_alloc_table();
         }
       } else if (action == RELEASE && has_resource(proc->id)) {
-        fprintf(stderr,
+        fprintf(fp,
                 "[%02d:%010d] Granting P%02d request to release R%02d\n",
                 clock_shm->secs,
                 clock_shm->nanosecs,
@@ -236,13 +236,6 @@ int main(int argc, char* argv[]) {
 
       increment_clock();
 
-      fprintf(stderr,
-              "[%02d:%010d] %d instance(s) of R%02d left\n",
-              clock_shm->secs,
-              clock_shm->nanosecs,
-              (res->num_instances - res->num_allocated),
-              res->type);
-
       // Reset process action
       init_proc_action(proc_action_shm);
     }
@@ -252,7 +245,7 @@ int main(int argc, char* argv[]) {
       // Release all resources held by process
       int released_res[NUM_RES];
       release_res(*term_pid, released_res, NUM_RES);
-      fprintf(stderr,
+      fprintf(fp,
               "[%02d:%010d] Detected P%02d is terminating\n",
               clock_shm->secs,
               clock_shm->nanosecs,
@@ -516,27 +509,27 @@ static void init_proc_list(struct proc_node* proc_list) {
   }
 }
 
-static void print_res_list(struct res_node* res_list) {
-  int i = 0;
-  for (; i < NUM_RES; i++) {
-    print_res_node(*(res_list + i));
-  }
-}
+// static void print_res_list(struct res_node* res_list) {
+//   int i = 0;
+//   for (; i < NUM_RES; i++) {
+//     print_res_node(*(res_list + i));
+//   }
+// }
 
-static void print_res_node(struct res_node node) {
-  printf("R%02d ", node.type);
-  printf("num_instances %02d ", node.num_instances);
-  printf("num_allocated %02d ", node.num_allocated);
-  printf("shareable %d ", node.shareable);
-  int i = 0;
-  for (; i < MAX_INSTANCES; i++) {
-    if (node.held_by[i] != -1) {
-      printf("held by P%02d",
-             node.held_by[i]);
-    }
-  }
-  printf("\n");
-}
+// static void print_res_node(struct res_node node) {
+//   printf("R%02d ", node.type);
+//   printf("num_instances %02d ", node.num_instances);
+//   printf("num_allocated %02d ", node.num_allocated);
+//   printf("shareable %d ", node.shareable);
+//   int i = 0;
+//   for (; i < MAX_INSTANCES; i++) {
+//     if (node.held_by[i] != -1) {
+//       printf("held by P%02d",
+//              node.held_by[i]);
+//     }
+//   }
+//   printf("\n");
+// }
 
 /**
  * Kills all remaining children
@@ -574,22 +567,22 @@ static int has_resource(int pid) {
  */
 static void print_res_alloc_table(void) {
   // Print header row
-  fprintf(stderr, "\n    ");
+  fprintf(fp, "\n    ");
   int i = 0;
   for (; i < NUM_RES; i++)
-    fprintf(stderr, "R%02d ", i);
-  fprintf(stderr, "\n");
+    fprintf(fp, "R%02d ", i);
+  fprintf(fp, "\n");
 
   i = 0;
   for (; i < ((NUM_RES + 1) * 4); i++)
-    fprintf(stderr, "-");
-  fprintf(stderr, "\n");
+    fprintf(fp, "-");
+  fprintf(fp, "\n");
 
   // Print how many resources each process holds
   i = 0;
   for(; i < MAX_PIDS; i++) {
     if (children[i] != -10 && children[i] != -20) {
-      fprintf(stderr, "P%02d  ", i);
+      fprintf(fp, "P%02d  ", i);
       int j = 0;
       for (; j < NUM_RES; j++) {
         int amt = 0;
@@ -598,12 +591,12 @@ static void print_res_alloc_table(void) {
           if ((res_list + j)->held_by[k] == i)
             amt++;
         }
-        fprintf(stderr, "%02d  ", amt);
+        fprintf(fp, "%02d  ", amt);
       }
-      fprintf(stderr, "\n");
+      fprintf(fp, "\n");
     }
   }
-  fprintf(stderr, "\n");
+  fprintf(fp, "\n");
 }
 
 
@@ -682,7 +675,6 @@ static int get_next_available_pid() {
     increment_clock();
   
   if (i == MAX_PIDS) {
-    fprintf(stderr, "MAXIMUM AMOUNT OF PROCESSES GENERATED ==== !!!!\n");
     return -10;
   }
   
@@ -706,26 +698,26 @@ struct my_clock get_time_to_detect_deadlock(int bound) {
 }
 
 static void detect_deadlock(int res_type, int pid) {
-  fprintf(stderr,
+  fprintf(fp,
           "[%02d:%010d] Running deadlock detection algorithm...\n",
           clock_shm->secs,
           clock_shm->nanosecs);
 
   int i = 0;
   struct res_node* res = res_list + res_type;
-  fprintf(stderr, "  Processes ");
+  fprintf(fp, "  Processes ");
   for (; i < MAX_INSTANCES; i++)
       if (res->held_by[i] != -1)
-        fprintf(stderr, "P%02d ", res->held_by[i]);
-  fprintf(stderr, "deadlocked\n");
+        fprintf(fp, "P%02d ", res->held_by[i]);
+  fprintf(fp, "deadlocked\n");
 
-  fprintf(stderr, "  Attempting to resolve deadlock...\n");
-  fprintf(stderr, "  Killing P%d:\n", pid);
+  fprintf(fp, "  Attempting to resolve deadlock...\n");
+  fprintf(fp, "  Killing P%d:\n", pid);
   int released_res[NUM_RES];
   release_res(pid, released_res, NUM_RES);
   print_released_res(released_res, NUM_RES);
   kill_child(pid);
-  fprintf(stderr, "  System is no longer in deadlock\n");
+  fprintf(fp, "  System is no longer in deadlock\n");
 }
 
 static void increment_clock() {
@@ -749,17 +741,17 @@ static void print_released_res(int* released_res, int num_res) {
       has_released_res = 1;
 
   if (has_released_res) {
-    fprintf(stderr,
+    fprintf(fp,
             "    Resources released are as follows: ");
     i = 0;
     for (; i < num_res; i++) {
       if (released_res[i] != 0) {
-        fprintf(stderr,
+        fprintf(fp,
                 "R%02d:%d ",
                 i,
                 released_res[i]);
       }
     }
-    fprintf(stderr, "\n");
+    fprintf(fp, "\n");
   }
 }
