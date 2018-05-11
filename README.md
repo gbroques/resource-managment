@@ -10,7 +10,7 @@ Within the root of the project:
 2. Run `make`
 3. Run `oss`
 
-## Arbritration Rule
+## Arbitration Rule
 When the system deadlocks, we use a **LIFO** policy to determine which process to kill first.
 
 ## Arguments
